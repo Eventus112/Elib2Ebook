@@ -7,7 +7,7 @@
 ```
 Elib2Ebook.sln
 ├── src/
-│   ├── Elib2Ebook.Domain/            # Модели данных
+│   ├── Elib2Ebook.Domain/             # Модели данных
 │   ├── Elib2Ebook.DomainServices/     # Бизнес-логика
 │   ├── Elib2EbookCli/                 # Консольное приложение
 │   ├── Elib2EbookWeb/                 # Веб-приложение (Blazor)
