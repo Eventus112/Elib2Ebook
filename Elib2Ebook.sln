@@ -138,7 +138,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elib2Ebook.ExternalServices
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elib2Ebook.ExternalServices.TwilightRussia", "src\ExternalServices\Elib2Ebook.ExternalServices.TwilightRussia\Elib2Ebook.ExternalServices.TwilightRussia.csproj", "{7CA07B2A-F612-47F0-8F4F-E7771BF9DED1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elib2Ebook.ExternalServices.Wattpad", "src\ExternalServices\Elib2Ebook.ExternalServices.Wattpad\Elib2Ebook.ExternalServices.Wattpad.csproj", "{FA121F56-04BB-46A1-B8C1-0C282295584B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elib2Ebook.ExternalServices.WattpadCom", "src\ExternalServices\Elib2Ebook.ExternalServices.WattpadCom\Elib2Ebook.ExternalServices.WattpadCom.csproj", "{FA121F56-04BB-46A1-B8C1-0C282295584B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elib2Ebook.ExternalServices.WuxiaWorld", "src\ExternalServices\Elib2Ebook.ExternalServices.WuxiaWorld\Elib2Ebook.ExternalServices.WuxiaWorld.csproj", "{3C0A98D5-DAFF-4FF1-9A59-F7409CB66754}"
 EndProject
@@ -147,6 +147,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elib2Ebook.Domain", "src\Elib2Ebook.Domain\Elib2Ebook.Domain.csproj", "{07A39741-8656-488A-964C-D8387A1925DF}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elib2Ebook.DomainServices", "src\Elib2Ebook.DomainServices\Elib2Ebook.DomainServices.csproj", "{76924193-4339-4BC8-8C0B-CA5F0A5047FB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elib2Ebook.ExternalServices.WattpadRu", "src\ExternalServices\Elib2Ebook.ExternalServices.WattpadRu\Elib2Ebook.ExternalServices.WattpadRu.csproj", "{8042BF60-B374-4C40-BB55-7405736A711A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -974,6 +976,18 @@ Global
 		{76924193-4339-4BC8-8C0B-CA5F0A5047FB}.Release|x64.Build.0 = Release|Any CPU
 		{76924193-4339-4BC8-8C0B-CA5F0A5047FB}.Release|x86.ActiveCfg = Release|Any CPU
 		{76924193-4339-4BC8-8C0B-CA5F0A5047FB}.Release|x86.Build.0 = Release|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Debug|x64.Build.0 = Debug|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Debug|x86.Build.0 = Debug|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Release|x64.ActiveCfg = Release|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Release|x64.Build.0 = Release|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Release|x86.ActiveCfg = Release|Any CPU
+		{8042BF60-B374-4C40-BB55-7405736A711A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1048,5 +1062,6 @@ Global
 		{46B6E125-FF47-4453-9172-5DF695687FDF} = {EC9257F5-F59F-4F7C-B316-A153DCB9501C}
 		{07A39741-8656-488A-964C-D8387A1925DF} = {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 		{76924193-4339-4BC8-8C0B-CA5F0A5047FB} = {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+		{8042BF60-B374-4C40-BB55-7405736A711A} = {EC9257F5-F59F-4F7C-B316-A153DCB9501C}
 	EndGlobalSection
 EndGlobal

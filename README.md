@@ -88,7 +88,6 @@ https://bookstab.ru/
 https://bookstime.ru/
 https://bookuruk.com/
 https://boovell.ru/
-https://boosty.to/
 https://dark-novels.ru/
 https://desu.me/
 https://dreame.com/
@@ -151,6 +150,7 @@ https://tl.rulate.ru/
 https://topliba.com/
 https://twilightrussia.ru/
 https://v2.slashlib.me/
+https://watt-pad.ru/
 https://wattpad.com/
 https://wuxiaworld.ru/
 https://younettranslate.com/
