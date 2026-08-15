@@ -33,7 +33,8 @@ public abstract class RulateGetterBase(BookGetterConfig config) : GetterBase(con
             return;
         }
 
-        var doc = await Config.Client.PostHtmlDocWithTriesAsync(SystemUrl, GetAuthData());
+        var main = await Config.Client.GetHtmlDocWithTriesAsync(SystemUrl);
+        var doc = await Config.Client.PostHtmlDocWithTriesAsync(SystemUrl, GetAuthData(main));
         var alertBlock = doc.QuerySelector("div.alert.in.alert-block");
 
         if (alertBlock == null)
@@ -58,11 +59,13 @@ public abstract class RulateGetterBase(BookGetterConfig config) : GetterBase(con
         }
     }
 
-    private FormUrlEncodedContent GetAuthData()
+    private FormUrlEncodedContent GetAuthData(HtmlDocument doc)
     {
         var data = new Dictionary<string, string>
         {
-            ["login[login]"] = Config.Options.Login, ["login[pass]"] = Config.Options.Password,
+            ["login[login]"] = Config.Options.Login,
+            ["login[pass]"] = Config.Options.Password,
+            ["csrf_token"] = doc.QuerySelector("meta[name=csrf-token]").Attributes["content"].Value
         };
 
         return new FormUrlEncodedContent(data);
