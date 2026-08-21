@@ -57,22 +57,74 @@ public class JaomixGetter(BookGetterConfig config) : GetterBase(config)
     private async Task<HtmlDocument> GetChapter(Uri url)
     {
         var doc = await Config.Client.GetHtmlDocWithTriesAsync(url);
-        for (var attempt = 0; HasCaptcha(doc) && attempt < 3; attempt++)
+        if (HasCaptcha(doc))
         {
-            Config.Logger.LogInformation($"Jaomix вернул капчу для {url}. Повторяю запрос");
-            await Task.Delay(TimeSpan.FromSeconds(2));
-            doc = await Config.Client.GetHtmlDocWithTriesAsync(url);
+            Config.Logger.LogInformation($"Jaomix запросил поворот изображения для {url}. Прохожу проверку автоматически");
+            doc = await SolveCaptcha(url);
         }
 
         if (HasCaptcha(doc))
         {
-            throw new InvalidOperationException($"Jaomix требует прохождения капчи для {url}. Повторите загрузку позже");
+            throw new InvalidOperationException($"Jaomix не принял автоматическую проверку для {url}. Повторите загрузку позже");
         }
 
         return ExtractChapter(doc, url);
     }
 
-    private static bool HasCaptcha(HtmlDocument doc)
+    private async Task<HtmlDocument> SolveCaptcha(Uri chapterUrl)
+    {
+        await PostCaptcha(chapterUrl, new Dictionary<string, string>
+        {
+            ["action"] = "picturecaptcharotate"
+        });
+
+        foreach (var degree in GetCaptchaDegrees())
+        {
+            var html = await PostCaptcha(chapterUrl, new Dictionary<string, string>
+            {
+                ["action"] = "piccapt",
+                ["deg"] = degree.ToString()
+            });
+
+            if (IsCaptchaResponse(html))
+            {
+                continue;
+            }
+
+            Config.Logger.LogInformation($"Jaomix принял проверку на угле {degree}°");
+            return WrapChapterFragment(html);
+        }
+
+        throw new InvalidOperationException($"Jaomix не принял ни один угол поворота для {chapterUrl}. Повторите загрузку позже");
+    }
+
+    private async Task<string> PostCaptcha(Uri chapterUrl, Dictionary<string, string> form)
+    {
+        using var response = await Config.Client.SendWithTriesAsync(() =>
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, SystemUrl.MakeRelativeUri("/wp-admin/admin-ajax.php"));
+            request.Headers.Referrer = chapterUrl;
+            request.Content = new FormUrlEncodedContent(form);
+            return request;
+        });
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    internal static IEnumerable<int> GetCaptchaDegrees()
+        => Enumerable.Range(0, 18).Select(value => value * 20);
+
+    internal static bool IsCaptchaResponse(string html)
+        => string.IsNullOrWhiteSpace(html) ||
+           html.Contains("Неправильный ответ", StringComparison.OrdinalIgnoreCase) ||
+           html.Contains("Обновить капчу", StringComparison.OrdinalIgnoreCase) ||
+           html.Contains("Ошибка. Обновите страницу", StringComparison.OrdinalIgnoreCase) ||
+           html.Contains("block-capth-img", StringComparison.OrdinalIgnoreCase);
+
+    internal static HtmlDocument WrapChapterFragment(string html)
+        => $"<div class=\"entry-content entry\">{html}</div>".AsHtmlDoc();
+
+    internal static bool HasCaptcha(HtmlDocument doc)
         => doc.QuerySelector("div.themeform div.h-captcha, div.themeform div.but-captcha, .entry-content .h-captcha, .entry-content .but-captcha") != null;
 
     internal static HtmlDocument ExtractChapter(HtmlDocument doc, Uri url = null)

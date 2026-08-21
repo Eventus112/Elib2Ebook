@@ -77,4 +77,41 @@ public class JaomixGetterTests
         Assert.DoesNotContain("Реклама", chapter.DocumentNode.InnerText);
         Assert.DoesNotContain("tracking", chapter.DocumentNode.InnerText);
     }
+
+    [Fact]
+    public void DetectsCurrentPartialChapterCaptcha()
+    {
+        var doc = Doc("""
+            <div class="entry-content entry">
+              <p>Начало главы...</p>
+              <div class="but-captcha">Нажмите, для загрузки полной главы.</div>
+            </div>
+            """);
+
+        Assert.True(JaomixGetter.HasCaptcha(doc));
+    }
+
+    [Fact]
+    public void UsesEveryCaptchaAngleInTwentyDegreeSteps()
+    {
+        Assert.Equal(Enumerable.Range(0, 18).Select(value => value * 20), JaomixGetter.GetCaptchaDegrees());
+    }
+
+    [Theory]
+    [InlineData("<p>Неправильный ответ</p>")]
+    [InlineData("<div class=\"block-capth-img\"></div>")]
+    [InlineData("<p>Ошибка. Обновите страницу.</p>")]
+    public void DetectsCaptchaResponses(string html)
+    {
+        Assert.True(JaomixGetter.IsCaptchaResponse(html));
+    }
+
+    [Fact]
+    public void WrapsSolvedCaptchaFragmentAsCurrentChapterLayout()
+    {
+        var doc = JaomixGetter.WrapChapterFragment("<h2>Глава 0</h2><p>Полный текст главы</p>");
+
+        Assert.False(JaomixGetter.HasCaptcha(doc));
+        Assert.Contains("Полный текст главы", JaomixGetter.ExtractChapter(doc).DocumentNode.InnerText);
+    }
 }
