@@ -38,12 +38,12 @@ public class JaomixGetter(BookGetterConfig config) : GetterBase(config)
             return result;
         }
 
-        foreach (var jaomixChapter in GetToc(doc, url))
+        foreach (var jaomixChapter in await GetToc(doc, url))
         {
             Config.Logger.LogInformation($"Загружаю главу {jaomixChapter.Title.CoverQuotes()}");
             var chapter = new Chapter();
             var chapterDoc = await GetChapter(jaomixChapter.Url);
-            chapter.Images = await GetImages(chapterDoc, url);
+            chapter.Images = await GetImages(chapterDoc, jaomixChapter.Url);
             chapter.Content = chapterDoc.DocumentNode.InnerHtml;
             chapter.Title = jaomixChapter.Title;
 
@@ -57,18 +57,43 @@ public class JaomixGetter(BookGetterConfig config) : GetterBase(config)
     private async Task<HtmlDocument> GetChapter(Uri url)
     {
         var doc = await Config.Client.GetHtmlDocWithTriesAsync(url);
-        while (doc.QuerySelector("div.themeform div.h-captcha, div.themeform div.but-captcha") != null)
+        for (var attempt = 0; HasCaptcha(doc) && attempt < 3; attempt++)
         {
-            Config.Logger.LogInformation($"Обнаружена капча. Перейдите по ссылке {url}, введите капчу и нажмите Enter...");
-            Console.Read();
+            Config.Logger.LogInformation($"Jaomix вернул капчу для {url}. Повторяю запрос");
+            await Task.Delay(TimeSpan.FromSeconds(2));
             doc = await Config.Client.GetHtmlDocWithTriesAsync(url);
+        }
+
+        if (HasCaptcha(doc))
+        {
+            throw new InvalidOperationException($"Jaomix требует прохождения капчи для {url}. Повторите загрузку позже");
+        }
+
+        return ExtractChapter(doc, url);
+    }
+
+    private static bool HasCaptcha(HtmlDocument doc)
+        => doc.QuerySelector("div.themeform div.h-captcha, div.themeform div.but-captcha, .entry-content .h-captcha, .entry-content .but-captcha") != null;
+
+    internal static HtmlDocument ExtractChapter(HtmlDocument doc, Uri url = null)
+    {
+        var content = doc.QuerySelector("div.themeform") ?? doc.QuerySelector(".entry-content.entry");
+        if (content == null)
+        {
+            throw new InvalidOperationException($"На странице Jaomix не найден текст главы{(url == null ? string.Empty : $": {url}")}");
         }
 
         var sb = new StringBuilder();
 
-        foreach (var node in doc.QuerySelector("div.themeform").ChildNodes)
+        foreach (var node in content.ChildNodes)
         {
-            if (node.Name != "br" && node.Name != "script" && !string.IsNullOrWhiteSpace(node.InnerHtml) && node.Attributes["class"]?.Value?.Contains("adblock-service") == null)
+            var nodeClass = node.Attributes["class"]?.Value;
+            if (node.Name != "br" &&
+                node.Name != "script" &&
+                node.Name != "style" &&
+                !string.IsNullOrWhiteSpace(node.InnerHtml) &&
+                nodeClass?.Contains("adblock-service") != true &&
+                nodeClass?.Contains("lazyblock") != true)
             {
                 var tag = node.Name == "#text" ? "p" : node.Name;
                 sb.Append(node.InnerHtml.HtmlDecode().CoverTag(tag));
@@ -78,12 +103,51 @@ public class JaomixGetter(BookGetterConfig config) : GetterBase(config)
         return sb.AsHtmlDoc();
     }
 
-    private IEnumerable<UrlChapter> GetToc(HtmlDocument doc, Uri url)
+    private async Task<IEnumerable<UrlChapter>> GetToc(HtmlDocument doc, Uri url)
     {
         var chapters = ParseChapters(doc, url).ToList();
+        var pages = GetTocPageNumbers(doc);
+        foreach (var page in pages.Where(page => page > 1))
+        {
+            Config.Logger.LogInformation($"Загружаю оглавление Jaomix: часть {page} из {pages.Count}");
+            var pageDoc = await GetTocPage(url, page);
+            chapters.AddRange(ParseChapters(pageDoc, url));
+        }
+
+        chapters = chapters
+            .Where(chapter => chapter.Url != null)
+            .GroupBy(chapter => chapter.Url.AbsoluteUri)
+            .Select(group => group.First())
+            .Reverse()
+            .ToList();
+
+        if (chapters.Count == 0)
+        {
+            throw new InvalidOperationException("На странице Jaomix не найдено оглавление книги");
+        }
+
         Config.Logger.LogInformation($"Получено {chapters.Count} глав");
 
         return SliceToc(chapters, c => c.Title);
+    }
+
+    private async Task<HtmlDocument> GetTocPage(Uri bookUrl, int page)
+    {
+        using var response = await Config.Client.SendWithTriesAsync(() =>
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, SystemUrl.MakeRelativeUri("/wp-admin/admin-ajax.php"));
+            request.Headers.Referrer = bookUrl;
+            request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["action"] = "loadpagenavchapstt",
+                ["page"] = page.ToString()
+            });
+            return request;
+        });
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        return stream.AsHtmlDoc(Encoding.UTF8);
     }
 
     private Task<TempFile> GetCover(HtmlDocument doc, Uri bookUri)
@@ -92,9 +156,32 @@ public class JaomixGetter(BookGetterConfig config) : GetterBase(config)
         return !string.IsNullOrWhiteSpace(imagePath) ? SaveImage(bookUri.MakeRelativeUri(imagePath)) : Task.FromResult(default(TempFile));
     }
 
-    private static IEnumerable<UrlChapter> ParseChapters(HtmlDocument doc, Uri url)
+    internal static List<int> GetTocPageNumbers(HtmlDocument doc)
     {
-        return doc.QuerySelectorAll("form.download-chapter .hiddenstab .flex-dow-txt a").Select(a => new UrlChapter(url.MakeRelativeUri(a.Attributes["href"].Value), a.InnerText.Trim()))
-            .Reverse();
+        var pages = doc.QuerySelectorAll(".block-toc select.sel-toc option")
+            .Select(option => int.TryParse(option.Attributes["value"]?.Value, out var page) ? page : 0)
+            .Where(page => page > 0)
+            .Distinct()
+            .OrderBy(page => page)
+            .ToList();
+
+        return pages.Count > 0 ? pages : [1];
+    }
+
+    internal static IEnumerable<UrlChapter> ParseChapters(HtmlDocument doc, Uri url)
+    {
+        var links = doc.QuerySelectorAll("form.download-chapter .hiddenstab .flex-dow-txt a").ToList();
+        if (links.Count == 0)
+        {
+            links = doc.QuerySelectorAll(".block-toc-out .flex-dow-txt a").ToList();
+        }
+        if (links.Count == 0)
+        {
+            links = doc.QuerySelectorAll(".flex-dow-txt a").ToList();
+        }
+
+        return links
+            .Where(link => !string.IsNullOrWhiteSpace(link.Attributes["href"]?.Value))
+            .Select(link => new UrlChapter(url.MakeRelativeUri(link.Attributes["href"].Value), link.GetText().Trim()));
     }
 }
