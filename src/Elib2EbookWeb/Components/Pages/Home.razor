@@ -26,7 +26,7 @@
 
     private async Task OnClick(Options options, ILogger logger)
     {
-        using var tempSave = TempFolderFactory.Create("Books_" + Guid.NewGuid());
+        using var tempSave = TempFolderFactory.Create(null);
 
         options.Timeout = Configuration.GetValue("Elib2Ebook:Timeout", 120);
         options.Delay = Configuration.GetValue("Elib2Ebook:Delay", 0);

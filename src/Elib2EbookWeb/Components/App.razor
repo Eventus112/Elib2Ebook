@@ -28,9 +28,10 @@
         const anchorElement = document.createElement('a');
         anchorElement.href = url;
         anchorElement.download = fileName ?? '';
+        document.body.appendChild(anchorElement);
         anchorElement.click();
         anchorElement.remove();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 </script>
 
