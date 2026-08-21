@@ -25,7 +25,7 @@ services:
       Elib2Ebook__Delay: 1
       Elib2Ebook__Flare: http://flaresolverr:8191
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${ELIB_WEB_BIND:-127.0.0.1}:${ELIB_WEB_PORT:-8080}:8080"
     depends_on:
       flaresolverr:
         condition: service_healthy

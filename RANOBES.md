@@ -9,7 +9,18 @@ cd /home/maxnim/ai/Elib2Ebook-ranobes
 docker compose up -d --build web
 ```
 
-Веб-интерфейс: <http://127.0.0.1:8080>. В Compose уже настроены задержка, таймаут и внутренний адрес FlareSolverr.
+Веб-интерфейс по умолчанию: <http://127.0.0.1:8080>. В Compose уже настроены задержка, таймаут и внутренний адрес FlareSolverr.
+
+Для доступа только через Tailscale создайте `.env` из примера и задайте адрес интерфейса `tailscale0`:
+
+```bash
+cp .env.example .env
+sed -i 's/ELIB_WEB_BIND=.*/ELIB_WEB_BIND=100.64.0.1/' .env
+sed -i 's/ELIB_WEB_PORT=.*/ELIB_WEB_PORT=8090/' .env
+docker compose up -d web
+```
+
+Замените `100.64.0.1` результатом команды `tailscale ip -4`. После этого интерфейс будет доступен по `http://TAILSCALE_IP:8090` и не будет опубликован в LAN.
 
 ## Консольный запуск
 

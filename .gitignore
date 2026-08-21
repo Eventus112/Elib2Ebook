@@ -25,6 +25,7 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+.env
 
 # Node (for any future frontend dependencies)
 node_modules/
