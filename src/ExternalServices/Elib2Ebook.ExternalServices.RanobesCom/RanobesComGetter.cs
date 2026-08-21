@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.RegularExpressions;
 using Elib2Ebook.Domain.Book;
 using Elib2Ebook.Domain.Common;
@@ -23,22 +22,109 @@ public class RanobesComGetter(BookGetterConfig config) : GetterBase(config)
 
     public override async Task<Book> Get(Uri url)
     {
+        PrepareClient();
         url = await GetMainUrl(url);
         url = SystemUrl.MakeRelativeUri($"/ranobe/{GetId(url)}.html");
-        var doc = await Config.Client.GetHtmlDocWithTriesAsync(url);
-        await Antibot(doc, url);
-        doc = await Config.Client.GetHtmlDocWithTriesAsync(url);
+        var doc = await GetDocument(url);
+        if (HasLegacyAntibot(doc))
+        {
+            await Antibot(doc, url);
+            doc = await GetDocument(url);
+        }
 
         var book = new Book(url)
         {
             Cover = await GetCover(doc, url),
             Chapters = await FillChapters(doc, url),
             Title = doc.QuerySelector("h1.title").FirstChild.InnerText.Trim().HtmlDecode(),
-            Author = new Author(doc.GetTextBySelector("span[itemprop=creator]") ?? "Ranobes"),
-            Annotation = doc.QuerySelector("div[itemprop=description]")?.RemoveNodes("style")?.InnerHtml
+            Author = new Author(doc.GetTextBySelector(".r-fullstory-spec .tag_list a") ?? "Ranobes"),
+            Annotation = doc.QuerySelector(".r-desription .cont-text")?.RemoveNodes("style")?.InnerHtml
         };
 
         return book;
+    }
+
+    private void PrepareClient()
+    {
+        if (string.IsNullOrWhiteSpace(Config.Options.Flare) && !Config.Client.DefaultRequestHeaders.UserAgent.Any())
+        {
+            Config.Client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36");
+        }
+
+        if (!Config.Client.DefaultRequestHeaders.AcceptLanguage.Any())
+        {
+            Config.Client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("ru-RU,ru;q=0.9,en;q=0.8");
+        }
+
+        Config.CookieContainer.Add(SystemUrl, new Cookie("browser_check", "1"));
+    }
+
+    private static bool HasLegacyAntibot(HtmlDocument doc)
+        => doc.ParsedText.Contains("antibot8/ab.php") && Regex.IsMatch(doc.ParsedText, "antibot_.*?=");
+
+    private static bool IsBlocked(HtmlDocument doc)
+        => doc.QuerySelector(".cf-turnstile") != null ||
+           doc.QuerySelector("title")?.InnerText.Contains("Just a moment", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static void EnsureNotBlocked(HtmlDocument doc, Uri uri)
+    {
+        if (IsBlocked(doc))
+        {
+            throw new InvalidOperationException(
+                $"Ranobes вернул антибот вместо страницы {uri}. Повторите позже с --delay 1 или запустите с --flare http://flaresolverr:8191.");
+        }
+    }
+
+    private async Task<HtmlDocument> GetDocument(Uri uri)
+    {
+        var doc = await Config.Client.GetHtmlDocWithTriesAsync(uri);
+        if (IsBlocked(doc) && !string.IsNullOrWhiteSpace(Config.Options.Flare))
+        {
+            doc = await GetDocumentWithFlare(uri);
+        }
+
+        EnsureNotBlocked(doc, uri);
+        return doc;
+    }
+
+    private async Task<HtmlDocument> GetDocumentWithFlare(Uri uri)
+    {
+        Config.Logger.LogInformation($"Ranobes запросил проверку браузера для {uri}. Использую FlareSolverr");
+
+        using var flareClient = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(Config.Options.Timeout)
+        };
+        var flareUri = new Uri(Config.Options.Flare.TrimEnd('/') + "/v1");
+        using var response = await flareClient.PostAsJsonAsync(
+            flareUri,
+            new
+            {
+                cmd = "request.get",
+                url = uri.ToString(),
+                maxTimeout = Config.Options.Timeout * 1000
+            });
+        response.EnsureSuccessStatusCode();
+
+        var flare = await response.Content.ReadFromJsonAsync<RanobesFlareResponse>();
+        if (flare?.Status != "ok" || flare.Solution == null || string.IsNullOrWhiteSpace(flare.Solution.Response))
+        {
+            throw new InvalidOperationException($"FlareSolverr не смог открыть {uri}: {flare?.Message ?? "пустой ответ"}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(flare.Solution.UserAgent))
+        {
+            Config.Client.DefaultRequestHeaders.UserAgent.Clear();
+            Config.Client.DefaultRequestHeaders.UserAgent.ParseAdd(flare.Solution.UserAgent);
+        }
+
+        foreach (var cookie in flare.Solution.Cookies.Where(c => !string.IsNullOrWhiteSpace(c.Name)))
+        {
+            Config.CookieContainer.Add(SystemUrl, new Cookie(cookie.Name, cookie.Value ?? string.Empty));
+        }
+
+        return flare.Solution.Response.AsHtmlDoc();
     }
 
     private async Task Antibot(HtmlDocument doc, Uri referrer)
@@ -124,7 +210,7 @@ public class RanobesComGetter(BookGetterConfig config) : GetterBase(config)
     {
         if (url.GetSegment(1) == "chapters" || !url.Segments.Last().EndsWith(".html"))
         {
-            var doc = await Config.Client.GetHtmlDocWithTriesAsync(SystemUrl.MakeRelativeUri(url.AbsolutePath));
+            var doc = await GetDocument(SystemUrl.MakeRelativeUri(url.AbsolutePath));
             return url.MakeRelativeUri(doc.QuerySelector("a[rel=up]").Attributes["href"].Value);
         }
 
@@ -156,25 +242,23 @@ public class RanobesComGetter(BookGetterConfig config) : GetterBase(config)
 
     private async Task<HtmlDocument> GetChapter(UrlChapter chapter)
     {
-        var doc = await Config.Client.GetHtmlDocWithTriesAsync(chapter.Url);
-        var sb = new StringBuilder();
-        foreach (var node in doc.QuerySelectorAll("#arrticle > :not(.splitnewsnavigation)"))
-        {
-            var tag = node.Name == "#text" ? "p" : node.Name;
-            if (tag == "img")
-            {
-                sb.Append(node.OuterHtml.Trim().CoverTag(tag));
-            }
-            else
-            {
-                if (node.InnerHtml?.Contains("window.yaContextCb") == false)
-                {
-                    sb.Append(node.InnerHtml.CoverTag(tag));
-                }
-            }
-        }
+        var doc = await GetDocument(chapter.Url);
+        return ExtractChapter(doc);
+    }
 
-        return sb.AsHtmlDoc().RemoveNodes(t => t.Name is "script" or "br" || t.Id?.Contains("yandex_rtb") == true);
+    internal static HtmlDocument ExtractChapter(HtmlDocument doc)
+    {
+        var article = doc.QuerySelector("#arrticle") ??
+                      throw new InvalidOperationException("На странице Ranobes не найден текст главы (#arrticle)");
+
+        // Chapter text is stored directly in text nodes separated by <br> tags.
+        // QuerySelectorAll only returns element nodes, which used to discard the
+        // actual prose and leave an empty chapter.
+        return article.InnerHtml.AsHtmlDoc().RemoveNodes(
+            node => node.Name == "script" ||
+                    node.HasClass("splitnewsnavigation") ||
+                    node.Id?.Contains("yandex_rtb") == true ||
+                    node.Name == "div" && node.InnerHtml?.Contains("window.yaContextCb") == true);
     }
 
     private Task<TempFile> GetCover(HtmlDocument doc, Uri bookUri)
@@ -183,20 +267,24 @@ public class RanobesComGetter(BookGetterConfig config) : GetterBase(config)
         return !string.IsNullOrWhiteSpace(imagePath) ? SaveImage(bookUri.MakeRelativeUri(imagePath)) : Task.FromResult(default(TempFile));
     }
 
-    private Uri GetTocLink(HtmlDocument doc, Uri uri)
+    internal static Uri GetTocLink(HtmlDocument doc, Uri uri)
     {
         var relativeUri = doc.QuerySelector("div.r-fullstory-btns a[title~=оглавление]").Attributes["href"].Value.HtmlDecode();
         if (!relativeUri.Contains("chapters"))
         {
-            relativeUri = $"/chapters/{string.Join("-", GetId(uri).Split(".")[0].Split("-").Skip(1))}";
+            var bookId = uri.Segments.Last().Split('.')[0];
+            relativeUri = $"/chapters/{string.Join("-", bookId.Split('-').Skip(1))}/";
         }
 
-        return uri.MakeRelativeUri(relativeUri.AsUri().AbsolutePath.Trim('/'));
+        // Ranobes currently returns an absolute, HTML-encoded URL here. Removing
+        // the leading slash made Uri resolve it below /ranobe/, producing the
+        // invalid /ranobe/chapters/... address and therefore an empty TOC.
+        return uri.MakeRelativeUri(relativeUri);
     }
 
     private async Task<IEnumerable<UrlChapter>> GetToc(Uri tocUri)
     {
-        var doc = await Config.Client.GetHtmlDocWithTriesAsync(tocUri);
+        var doc = await GetDocument(tocUri);
         var lastA = doc.QuerySelector("div.pages a:last-child")?.InnerText;
         var pages = string.IsNullOrWhiteSpace(lastA) ? 1 : int.Parse(lastA);
 
@@ -204,7 +292,12 @@ public class RanobesComGetter(BookGetterConfig config) : GetterBase(config)
         var result = new List<UrlChapter>();
         for (var i = 1; i <= pages; i++)
         {
-            doc = await Config.Client.GetHtmlDocWithTriesAsync(tocUri.AppendSegment($"/page/{i}"));
+            if (i > 1)
+            {
+                var pageUri = tocUri.AppendSegment($"page/{i}");
+                doc = await GetDocument(pageUri);
+            }
+
             var chapters = doc
                 .QuerySelectorAll("#dle-content > .cat_block.cat_line a[title]")
                 .Select(a => new UrlChapter(a.Attributes["href"].Value.AsUri(), string.IsNullOrWhiteSpace(a.Attributes["title"].Value) ? "Без названия" : a.Attributes["title"].Value))

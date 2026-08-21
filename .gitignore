@@ -17,6 +17,7 @@ _ReSharper*/
 # Build
 dist/
 .dist/
+books/
 *.nupkg
 *.log
 logs/

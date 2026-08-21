@@ -1,0 +1,44 @@
+name: elib2ebook-ranobes
+
+services:
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:v3.5.0
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8191/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  web:
+    image: elib2ebook-ranobes-web:local
+    build:
+      context: .
+      dockerfile: src/Elib2EbookWeb/Dockerfile
+    restart: unless-stopped
+    user: "${ELIB_UID:-1000}:${ELIB_GID:-1000}"
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      Elib2Ebook__Timeout: 300
+      Elib2Ebook__Delay: 1
+      Elib2Ebook__Flare: http://flaresolverr:8191
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      flaresolverr:
+        condition: service_healthy
+
+  elib2ebook:
+    image: elib2ebook-ranobes:local
+    build:
+      context: .
+      dockerfile: src/Elib2EbookCli/Dockerfile
+    profiles: ["cli"]
+    user: "${ELIB_UID:-1000}:${ELIB_GID:-1000}"
+    volumes:
+      - ./books:/Save
+    depends_on:
+      flaresolverr:
+        condition: service_healthy

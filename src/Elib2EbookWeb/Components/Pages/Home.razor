@@ -6,6 +6,7 @@
 @using Elib2Ebook.DomainServices.Misc.TempFolder
 @inject IJSRuntime JsRuntime
 @inject ISnackbar Snackbar
+@inject IConfiguration Configuration
 
 <PageTitle>Elib2Ebook</PageTitle>
 
@@ -27,7 +28,9 @@
     {
         using var tempSave = TempFolderFactory.Create("Books_" + Guid.NewGuid());
 
-        options.Timeout = 10;
+        options.Timeout = Configuration.GetValue("Elib2Ebook:Timeout", 120);
+        options.Delay = Configuration.GetValue("Elib2Ebook:Delay", 0);
+        options.Flare = Configuration["Elib2Ebook:Flare"];
         options.SavePath = tempSave.Path;
 
         try
